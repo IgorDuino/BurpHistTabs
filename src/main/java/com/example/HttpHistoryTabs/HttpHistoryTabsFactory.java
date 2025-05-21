@@ -46,7 +46,7 @@ public class HttpHistoryTabsFactory {
             int plusTabIndex = mainTabbedPane.indexOfTab("+");
             if (plusTabIndex != -1 && selectedIndex == plusTabIndex) {
                 addNewSubTab();
-                // Always select the new tab (now second to last)
+
                 mainTabbedPane.setSelectedIndex(mainTabbedPane.getTabCount() - 2);
                 return;
             }
@@ -82,17 +82,17 @@ public class HttpHistoryTabsFactory {
     }
 
     private void addPlusTab() {
-        // Remove any existing '+' tab first
+
         int plusTabIndex = mainTabbedPane.indexOfTab("+");
         if (plusTabIndex != -1) {
             mainTabbedPane.removeTabAt(plusTabIndex);
         }
-        // Add a new '+' tab at the end, with no content
+
         mainTabbedPane.addTab("+", null);
     }
 
     private void addNewSubTab() {
-        // Remove the '+' tab if present
+
         int plusTabIndex = mainTabbedPane.indexOfTab("+");
         if (plusTabIndex != -1) {
             mainTabbedPane.removeTabAt(plusTabIndex);
@@ -112,6 +112,61 @@ public class HttpHistoryTabsFactory {
         titlePanel.add(closeButton);
         titlePanel.setAlignmentY(Component.CENTER_ALIGNMENT);
 
+        java.awt.event.MouseListener selectTabListener = new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 1 && SwingUtilities.isLeftMouseButton(e)) {
+                    if (!(e.getSource() instanceof CloseTabButton)) {
+                        int tabIndex = mainTabbedPane.indexOfTabComponent(titlePanel);
+                        if (tabIndex != -1) {
+                            mainTabbedPane.setSelectedIndex(tabIndex);
+                        }
+                    }
+                }
+            }
+        };
+        titlePanel.addMouseListener(selectTabListener);
+        titleLabel.addMouseListener(selectTabListener);
+
+        titleLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+                    JTextField editor = new JTextField(newSubTab.getTabTitle());
+                    editor.setFont(titleLabel.getFont());
+                    editor.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
+                    editor.setColumns(Math.max(4, newSubTab.getTabTitle().length()));
+                    titlePanel.remove(titleLabel);
+                    titlePanel.add(editor, 0);
+                    titlePanel.revalidate();
+                    titlePanel.repaint();
+                    editor.requestFocusInWindow();
+                    editor.selectAll();
+
+                    Runnable finishEdit = () -> {
+                        String text = editor.getText().trim();
+                        if (text.isEmpty()) {
+                            text = String.valueOf(tabNumber);
+                        }
+                        newSubTab.setTabTitle(text);
+                        titleLabel.setText(text);
+                        titlePanel.remove(editor);
+                        titlePanel.add(titleLabel, 0);
+                        titlePanel.revalidate();
+                        titlePanel.repaint();
+                    };
+
+                    editor.addActionListener(ev -> finishEdit.run());
+                    editor.addFocusListener(new java.awt.event.FocusAdapter() {
+                        @Override
+                        public void focusLost(java.awt.event.FocusEvent e) {
+                            finishEdit.run();
+                        }
+                    });
+                }
+            }
+        });
+
         mainTabbedPane.addTab(null, newSubTab.getUiComponent());
         mainTabbedPane.setTabComponentAt(mainTabbedPane.getTabCount() - 1, titlePanel);
         mainTabbedPane.setSelectedComponent(newSubTab.getUiComponent());
@@ -124,9 +179,6 @@ public class HttpHistoryTabsFactory {
             subTabs.remove(subTabToRemove);
             api.logging().logToOutput("Removed sub-tab: " + subTabToRemove.getTabTitle());
 
-            if (subTabs.isEmpty()) {
-                addNewSubTab();
-            }
         }
     }
 
@@ -139,7 +191,7 @@ public class HttpHistoryTabsFactory {
         private final HttpResponseEditor responseViewer;
         private final JTextField filterTextField;
         private final List<HttpRequestResponse> displayedRequests = new ArrayList<>();
-        private final String tabTitle;
+        private String tabTitle;
         private final HttpHistoryTabsFactory factory;
 
         private boolean isRequestResponseViewVisible = true;
@@ -168,7 +220,7 @@ public class HttpHistoryTabsFactory {
             JButton applyFilterButton = new JButton("Apply Filter");
 
             JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            filterPanel.add(new JLabel("Regex filter:"));
+            filterPanel.add(new JLabel("Filter:"));
             filterPanel.add(filterTextField);
             filterPanel.add(applyFilterButton);
 
@@ -255,7 +307,6 @@ public class HttpHistoryTabsFactory {
                 }
             });
 
-            // Add context menu to historyTable
             JPopupMenu contextMenu = new JPopupMenu();
             JMenuItem sendToRepeaterItem = new JMenuItem("Send to Repeater");
             JMenuItem sendToIntruderItem = new JMenuItem("Send to Intruder");
@@ -366,6 +417,10 @@ public class HttpHistoryTabsFactory {
             return tabTitle;
         }
 
+        public void setTabTitle(String title) {
+            this.tabTitle = title;
+        }
+
         public void addRequestResponse(HttpRequestResponse requestResponse) {
             SwingUtilities.invokeLater(() -> {
                 tableModel.addEntry(requestResponse);
@@ -373,25 +428,12 @@ public class HttpHistoryTabsFactory {
         }
 
         public boolean matchesFilters(HttpRequestResponse requestResponse) {
-            String filterText = filterTextField.getText().trim().toLowerCase();
+            String filterText = filterTextField.getText().trim();
             if (filterText.isEmpty()) {
                 return true;
             }
 
-            String host = requestResponse.request().httpService().host();
-            String url = requestResponse.request().url();
-            String requestBody = requestResponse.request().bodyToString().toLowerCase();
-            String responseBody = (requestResponse.response() != null)
-                    ? requestResponse.response().bodyToString().toLowerCase()
-                    : "";
-
-            if (host != null && host.toLowerCase().contains(filterText))
-                return true;
-            if (url != null && url.toLowerCase().contains(filterText))
-                return true;
-            if (requestBody.contains(filterText))
-                return true;
-            return responseBody.contains(filterText);
+            return requestResponse.request().contains(filterText, false);
         }
     }
 
@@ -459,7 +501,6 @@ public class HttpHistoryTabsFactory {
         }
     }
 
-    // Custom close button for tab with hover effect
     private static class CloseTabButton extends JButton {
         private boolean hovered = false;
 
@@ -495,7 +536,7 @@ public class HttpHistoryTabsFactory {
             Graphics2D g2 = (Graphics2D) g.create();
             if (hovered) {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(new Color(255, 120, 60, 120)); // Orange-ish, semi-transparent
+                g2.setColor(new Color(255, 120, 60, 120));
                 g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 8, 8);
             }
             super.paintComponent(g2);
