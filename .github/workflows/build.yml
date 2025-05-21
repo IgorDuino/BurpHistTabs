@@ -24,7 +24,7 @@ jobs:
     - name: Determine JAR details
       id: jar_details
       run: |
-        JAR_FULL_PATH=$(ls target/HttpHistoryTabs-*-all.jar)
+        JAR_FULL_PATH=$(ls target/HttpHistoryTabs-*.jar)
         echo "JAR_UPLOAD_PATH=${JAR_FULL_PATH}" >> $GITHUB_ENV
         echo "jar_basename=$(basename ${JAR_FULL_PATH})" >> $GITHUB_OUTPUT
     - name: Upload JAR artifact
