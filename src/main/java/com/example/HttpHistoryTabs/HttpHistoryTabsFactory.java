@@ -54,8 +54,7 @@ public class HttpHistoryTabsFactory {
                 HttpRequestResponse requestResponse = HttpRequestResponse.httpRequestResponse(
                         responseReceived.initiatingRequest(),
                         responseReceived,
-                        responseReceived.annotations()
-                );
+                        responseReceived.annotations());
 
                 SwingUtilities.invokeLater(() -> {
                     for (HttpHistorySubTab subTab : subTabs) {
@@ -120,6 +119,21 @@ public class HttpHistoryTabsFactory {
         private final String tabTitle;
         private final HttpHistoryTabsFactory factory;
 
+        private boolean isRequestResponseViewVisible = true;
+        private boolean isRequestResponseViewAtBottom = false;
+
+        private final JSplitPane viewersSplitPane;
+        private final JPanel requestResponseViewPanel;
+
+        private final JScrollPane tableScrollPane;
+        private JSplitPane mainHorizontalSplitPane;
+        private final JPanel dynamicContentPanel;
+
+        private final JButton hideViewButton;
+        private final JButton showViewButton;
+        private final JButton togglePositionButton;
+        private final JPanel viewControlsPanel;
+
         public HttpHistorySubTab(MontoyaApi api, String title, HttpHistoryTabsFactory factory) {
             this.api = api;
             this.tabTitle = title;
@@ -138,25 +152,67 @@ public class HttpHistoryTabsFactory {
             tableModel = new HistoryTableModel();
             historyTable = new JTable(tableModel);
             historyTable.setAutoCreateRowSorter(true);
-            JScrollPane tableScrollPane = new JScrollPane(historyTable);
+            tableScrollPane = new JScrollPane(historyTable);
 
             requestViewer = userInterface.createHttpRequestEditor(EditorOptions.READ_ONLY);
             responseViewer = userInterface.createHttpResponseEditor(EditorOptions.READ_ONLY);
 
-            JSplitPane viewersSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, requestViewer.uiComponent(), responseViewer.uiComponent());
+            viewersSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, requestViewer.uiComponent(),
+                    responseViewer.uiComponent());
             viewersSplitPane.setResizeWeight(0.5);
 
-            mainPanel = new JPanel(new BorderLayout());
-            mainPanel.add(filterPanel, BorderLayout.NORTH);
+            requestResponseViewPanel = new JPanel(new BorderLayout());
+            requestResponseViewPanel.add(viewersSplitPane, BorderLayout.CENTER);
 
-            JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScrollPane, viewersSplitPane);
-            mainSplitPane.setResizeWeight(0.4);
-            mainPanel.add(mainSplitPane, BorderLayout.CENTER);
+            hideViewButton = new JButton("Hide View");
+            showViewButton = new JButton("Show View");
+            togglePositionButton = new JButton("Toggle View Position");
+
+            showViewButton.setVisible(false);
+
+            viewControlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            viewControlsPanel.add(hideViewButton);
+            viewControlsPanel.add(showViewButton);
+            viewControlsPanel.add(togglePositionButton);
+
+            JPanel topActionPanel = new JPanel(new BorderLayout());
+            topActionPanel.add(filterPanel, BorderLayout.WEST);
+            topActionPanel.add(viewControlsPanel, BorderLayout.EAST);
+
+            mainPanel = new JPanel(new BorderLayout());
+            mainPanel.add(topActionPanel, BorderLayout.NORTH);
+
+            dynamicContentPanel = new JPanel(new BorderLayout());
+            mainPanel.add(dynamicContentPanel, BorderLayout.CENTER);
+
+            updateViewLayout();
+
+            hideViewButton.addActionListener(e -> {
+                isRequestResponseViewVisible = false;
+                updateViewLayout();
+            });
+
+            showViewButton.addActionListener(e -> {
+                isRequestResponseViewVisible = true;
+                updateViewLayout();
+            });
+
+            togglePositionButton.addActionListener(e -> {
+                if (isRequestResponseViewVisible) {
+                    isRequestResponseViewAtBottom = !isRequestResponseViewAtBottom;
+                    updateViewLayout();
+                }
+            });
 
             historyTable.getSelectionModel().addListSelectionListener(e -> {
                 if (!e.getValueIsAdjusting()) {
                     int selectedRowInView = historyTable.getSelectedRow();
                     if (selectedRowInView >= 0) {
+
+                        if (!isRequestResponseViewVisible) {
+                            isRequestResponseViewVisible = true;
+
+                        }
                         int modelRow = historyTable.convertRowIndexToModel(selectedRowInView);
                         HttpRequestResponse selectedEntry = tableModel.getRequestResponseAt(modelRow);
                         if (selectedEntry != null) {
@@ -167,9 +223,46 @@ public class HttpHistoryTabsFactory {
                                 responseViewer.setResponse(HttpResponse.httpResponse());
                             }
                         }
+
+                        updateViewLayout();
                     }
                 }
             });
+        }
+
+        private void updateViewLayout() {
+
+            dynamicContentPanel.removeAll();
+
+            if (!isRequestResponseViewVisible) {
+                dynamicContentPanel.add(tableScrollPane, BorderLayout.CENTER);
+                togglePositionButton.setEnabled(false);
+                togglePositionButton.setText(isRequestResponseViewAtBottom ? "Move to Right" : "Move to Bottom");
+                hideViewButton.setVisible(false);
+                showViewButton.setVisible(true);
+            } else {
+                togglePositionButton.setEnabled(true);
+                hideViewButton.setVisible(true);
+                showViewButton.setVisible(false);
+                if (isRequestResponseViewAtBottom) {
+                    togglePositionButton.setText("Move to Right");
+                    dynamicContentPanel.add(tableScrollPane, BorderLayout.CENTER);
+                    dynamicContentPanel.add(requestResponseViewPanel, BorderLayout.SOUTH);
+                    requestResponseViewPanel
+                            .setPreferredSize(new Dimension(0, (int) (dynamicContentPanel.getHeight() * 0.5)));
+                } else {
+                    togglePositionButton.setText("Move to Bottom");
+                    mainHorizontalSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScrollPane,
+                            requestResponseViewPanel);
+                    mainHorizontalSplitPane.setResizeWeight(0.4);
+                    dynamicContentPanel.add(mainHorizontalSplitPane, BorderLayout.CENTER);
+                }
+            }
+
+            dynamicContentPanel.revalidate();
+            dynamicContentPanel.repaint();
+            mainPanel.revalidate();
+            mainPanel.repaint();
         }
 
         public Component getUiComponent() {
@@ -195,18 +288,23 @@ public class HttpHistoryTabsFactory {
             String host = requestResponse.request().httpService().host();
             String url = requestResponse.request().url();
             String requestBody = requestResponse.request().bodyToString().toLowerCase();
-            String responseBody = (requestResponse.response() != null) ? requestResponse.response().bodyToString().toLowerCase() : "";
+            String responseBody = (requestResponse.response() != null)
+                    ? requestResponse.response().bodyToString().toLowerCase()
+                    : "";
 
-            if (host != null && host.toLowerCase().contains(filterText)) return true;
-            if (url != null && url.toLowerCase().contains(filterText)) return true;
-            if (requestBody.contains(filterText)) return true;
+            if (host != null && host.toLowerCase().contains(filterText))
+                return true;
+            if (url != null && url.toLowerCase().contains(filterText))
+                return true;
+            if (requestBody.contains(filterText))
+                return true;
             return responseBody.contains(filterText);
         }
     }
 
     private static class HistoryTableModel extends AbstractTableModel {
         private final List<HttpRequestResponse> log = new ArrayList<>();
-        private final String[] columnNames = {"#", "Host", "Method", "URL", "Status", "Length"};
+        private final String[] columnNames = { "#", "Host", "Method", "URL", "Status", "Length" };
 
         public void addEntry(HttpRequestResponse entry) {
             log.add(entry);
@@ -238,16 +336,24 @@ public class HttpHistoryTabsFactory {
         @Override
         public Object getValueAt(int rowIndex, int columnIndex) {
             HttpRequestResponse entry = getRequestResponseAt(rowIndex);
-            if (entry == null) return null;
+            if (entry == null)
+                return null;
 
             switch (columnIndex) {
-                case 0: return rowIndex + 1;
-                case 1: return entry.request().httpService().host();
-                case 2: return entry.request().method();
-                case 3: return entry.request().path();
-                case 4: return entry.response() != null ? entry.response().statusCode() : "N/A";
-                case 5: return entry.response() != null ? entry.response().bodyToString().length() : 0;
-                default: return "";
+                case 0:
+                    return rowIndex + 1;
+                case 1:
+                    return entry.request().httpService().host();
+                case 2:
+                    return entry.request().method();
+                case 3:
+                    return entry.request().path();
+                case 4:
+                    return entry.response() != null ? entry.response().statusCode() : "N/A";
+                case 5:
+                    return entry.response() != null ? entry.response().bodyToString().length() : 0;
+                default:
+                    return "";
             }
         }
 
@@ -259,4 +365,4 @@ public class HttpHistoryTabsFactory {
             return String.class;
         }
     }
-} 
+}
