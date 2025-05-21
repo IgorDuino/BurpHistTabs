@@ -1,14 +1,12 @@
 package com.example.HttpHistoryTabs;
 
 import burp.api.montoya.MontoyaApi;
-import burp.api.montoya.core.ByteArray;
 import burp.api.montoya.http.handler.HttpHandler;
 import burp.api.montoya.http.handler.HttpRequestToBeSent;
 import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.handler.RequestToBeSentAction;
 import burp.api.montoya.http.handler.ResponseReceivedAction;
 import burp.api.montoya.http.message.HttpRequestResponse;
-import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.ui.UserInterface;
 import burp.api.montoya.ui.editor.EditorOptions;
@@ -18,7 +16,6 @@ import burp.api.montoya.ui.swing.SwingUtils;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
-import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,16 +33,12 @@ public class HttpHistoryTabsFactory {
 
         JButton addButton = new JButton("+");
         addButton.addActionListener(e -> addNewSubTab());
+        addButton.setFocusPainted(false);
+        addButton.setMargin(new Insets(1, 4, 1, 4));
 
-        JButton removeButton = new JButton("-");
-        removeButton.addActionListener(e -> removeSelectedSubTab());
-
-        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        controlPanel.add(addButton);
-        controlPanel.add(removeButton);
+        mainTabbedPane.putClientProperty("JTabbedPane.trailingComponent", addButton);
 
         mainPanel = new JPanel(new BorderLayout());
-        mainPanel.add(controlPanel, BorderLayout.NORTH);
         mainPanel.add(mainTabbedPane, BorderLayout.CENTER);
 
         addNewSubTab();
@@ -103,19 +96,15 @@ public class HttpHistoryTabsFactory {
         mainTabbedPane.setSelectedComponent(newSubTab.getUiComponent());
     }
 
-    private void removeSelectedSubTab() {
-        int selectedIndex = mainTabbedPane.getSelectedIndex();
-        if (selectedIndex >= 0) {
-            HttpHistorySubTab subTabToRemove = subTabs.get(selectedIndex);
-            removeSubTab(subTabToRemove);
-        }
-    }
-
     private void removeSubTab(HttpHistorySubTab subTabToRemove) {
         if (subTabToRemove != null && subTabs.contains(subTabToRemove)) {
             mainTabbedPane.remove(subTabToRemove.getUiComponent());
             subTabs.remove(subTabToRemove);
             api.logging().logToOutput("Removed sub-tab: " + subTabToRemove.getTabTitle());
+
+            if (subTabs.isEmpty()) {
+                addNewSubTab();
+            }
         }
     }
 
@@ -142,7 +131,7 @@ public class HttpHistoryTabsFactory {
             JButton applyFilterButton = new JButton("Apply Filter");
 
             JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            filterPanel.add(new JLabel("Filter (e.g., host contains 'example.com'):"));
+            filterPanel.add(new JLabel("Regex filter:"));
             filterPanel.add(filterTextField);
             filterPanel.add(applyFilterButton);
 
