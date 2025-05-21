@@ -21,11 +21,17 @@ jobs:
         cache: maven
     - name: Build with Maven
       run: mvn -B package --file pom.xml
+    - name: Determine JAR details
+      id: jar_details
+      run: |
+        JAR_FULL_PATH=$(ls target/HttpHistoryTabs-*-jar-with-dependencies.jar)
+        echo "JAR_UPLOAD_PATH=${JAR_FULL_PATH}" >> $GITHUB_ENV
+        echo "jar_basename=$(basename "${JAR_FULL_PATH}")" >> $GITHUB_OUTPUT
     - name: Upload JAR artifact
       uses: actions/upload-artifact@v4
       with:
         name: package
-        path: target/HttpHistoryTabs-*-all.jar
+        path: ${{ env.JAR_UPLOAD_PATH }}
 
   release: 
     needs: build
