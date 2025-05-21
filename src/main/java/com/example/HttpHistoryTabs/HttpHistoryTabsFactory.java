@@ -208,11 +208,12 @@ public class HttpHistoryTabsFactory {
                 if (!e.getValueIsAdjusting()) {
                     int selectedRowInView = historyTable.getSelectedRow();
                     if (selectedRowInView >= 0) {
-
+                        boolean visibilityJustChanged = false;
                         if (!isRequestResponseViewVisible) {
                             isRequestResponseViewVisible = true;
-
+                            visibilityJustChanged = true;
                         }
+
                         int modelRow = historyTable.convertRowIndexToModel(selectedRowInView);
                         HttpRequestResponse selectedEntry = tableModel.getRequestResponseAt(modelRow);
                         if (selectedEntry != null) {
@@ -224,7 +225,9 @@ public class HttpHistoryTabsFactory {
                             }
                         }
 
-                        updateViewLayout();
+                        if (visibilityJustChanged) {
+                            updateViewLayout();
+                        }
                     }
                 }
             });
