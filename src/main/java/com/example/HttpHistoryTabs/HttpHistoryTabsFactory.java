@@ -35,17 +35,22 @@ public class HttpHistoryTabsFactory {
         this.api = api;
         this.mainTabbedPane = new JTabbedPane();
 
-        JButton addButton = new JButton("+");
-        addButton.addActionListener(e -> addNewSubTab());
-        addButton.setFocusPainted(false);
-        addButton.setMargin(new Insets(1, 4, 1, 4));
-
-        mainTabbedPane.putClientProperty("JTabbedPane.trailingComponent", addButton);
-
         mainPanel = new JPanel(new BorderLayout());
         mainPanel.add(mainTabbedPane, BorderLayout.CENTER);
 
         addNewSubTab();
+        addPlusTab();
+
+        mainTabbedPane.addChangeListener(e -> {
+            int selectedIndex = mainTabbedPane.getSelectedIndex();
+            int plusTabIndex = mainTabbedPane.indexOfTab("+");
+            if (plusTabIndex != -1 && selectedIndex == plusTabIndex) {
+                addNewSubTab();
+                // Always select the new tab (now second to last)
+                mainTabbedPane.setSelectedIndex(mainTabbedPane.getTabCount() - 2);
+                return;
+            }
+        });
 
         api.http().registerHttpHandler(new HttpHandler() {
             @Override
@@ -76,27 +81,41 @@ public class HttpHistoryTabsFactory {
         return mainPanel;
     }
 
+    private void addPlusTab() {
+        // Remove any existing '+' tab first
+        int plusTabIndex = mainTabbedPane.indexOfTab("+");
+        if (plusTabIndex != -1) {
+            mainTabbedPane.removeTabAt(plusTabIndex);
+        }
+        // Add a new '+' tab at the end, with no content
+        mainTabbedPane.addTab("+", null);
+    }
+
     private void addNewSubTab() {
-        int tabCount = mainTabbedPane.getTabCount();
-        String newTabTitle = "Tab " + (tabCount + 1);
+        // Remove the '+' tab if present
+        int plusTabIndex = mainTabbedPane.indexOfTab("+");
+        if (plusTabIndex != -1) {
+            mainTabbedPane.removeTabAt(plusTabIndex);
+        }
+        int tabNumber = subTabs.size() + 1;
+        String newTabTitle = String.valueOf(tabNumber);
         HttpHistorySubTab newSubTab = new HttpHistorySubTab(api, newTabTitle, this);
         subTabs.add(newSubTab);
 
-        JPanel tabPanel = new JPanel(new BorderLayout());
-        tabPanel.setOpaque(false);
-        JLabel titleLabel = new JLabel(newTabTitle + " ");
-        JButton closeButton = new JButton("x");
-        closeButton.setMargin(new Insets(0, 2, 0, 2));
-        closeButton.addActionListener(e -> removeSubTab(newSubTab));
-
         JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         titlePanel.setOpaque(false);
+        JLabel titleLabel = new JLabel(newTabTitle);
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
+        CloseTabButton closeButton = new CloseTabButton();
+        closeButton.addActionListener(e -> removeSubTab(newSubTab));
         titlePanel.add(titleLabel);
         titlePanel.add(closeButton);
+        titlePanel.setAlignmentY(Component.CENTER_ALIGNMENT);
 
         mainTabbedPane.addTab(null, newSubTab.getUiComponent());
         mainTabbedPane.setTabComponentAt(mainTabbedPane.getTabCount() - 1, titlePanel);
         mainTabbedPane.setSelectedComponent(newSubTab.getUiComponent());
+        addPlusTab();
     }
 
     private void removeSubTab(HttpHistorySubTab subTabToRemove) {
@@ -437,6 +456,50 @@ public class HttpHistoryTabsFactory {
                 return Integer.class;
             }
             return String.class;
+        }
+    }
+
+    // Custom close button for tab with hover effect
+    private static class CloseTabButton extends JButton {
+        private boolean hovered = false;
+
+        public CloseTabButton() {
+            super("x");
+            setMargin(new Insets(0, 4, 0, 4));
+            setBorderPainted(false);
+            setContentAreaFilled(false);
+            setFocusPainted(false);
+            setOpaque(false);
+            setFont(getFont().deriveFont(Font.PLAIN, 12f));
+            setPreferredSize(new Dimension(18, 18));
+            setMaximumSize(new Dimension(18, 18));
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setToolTipText("Close tab");
+            addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseEntered(java.awt.event.MouseEvent e) {
+                    hovered = true;
+                    repaint();
+                }
+
+                @Override
+                public void mouseExited(java.awt.event.MouseEvent e) {
+                    hovered = false;
+                    repaint();
+                }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            if (hovered) {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(255, 120, 60, 120)); // Orange-ish, semi-transparent
+                g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 8, 8);
+            }
+            super.paintComponent(g2);
+            g2.dispose();
         }
     }
 }
