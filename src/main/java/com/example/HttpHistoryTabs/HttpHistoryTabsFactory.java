@@ -7,12 +7,16 @@ import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.handler.RequestToBeSentAction;
 import burp.api.montoya.http.handler.ResponseReceivedAction;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.ui.UserInterface;
 import burp.api.montoya.ui.editor.EditorOptions;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
 import burp.api.montoya.ui.swing.SwingUtils;
+import burp.api.montoya.repeater.Repeater;
+import burp.api.montoya.intruder.Intruder;
+import burp.api.montoya.scope.Scope;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -228,6 +232,73 @@ public class HttpHistoryTabsFactory {
                         if (visibilityJustChanged) {
                             updateViewLayout();
                         }
+                    }
+                }
+            });
+
+            // Add context menu to historyTable
+            JPopupMenu contextMenu = new JPopupMenu();
+            JMenuItem sendToRepeaterItem = new JMenuItem("Send to Repeater");
+            JMenuItem sendToIntruderItem = new JMenuItem("Send to Intruder");
+            JMenuItem addToScopeItem = new JMenuItem("Add to Scope");
+            contextMenu.add(sendToRepeaterItem);
+            contextMenu.add(sendToIntruderItem);
+            contextMenu.add(addToScopeItem);
+
+            sendToRepeaterItem.addActionListener(e -> {
+                int row = historyTable.getSelectedRow();
+                if (row >= 0) {
+                    int modelRow = historyTable.convertRowIndexToModel(row);
+                    HttpRequestResponse reqResp = tableModel.getRequestResponseAt(modelRow);
+                    if (reqResp != null) {
+                        api.repeater().sendToRepeater(reqResp.request(), null);
+                    }
+                }
+            });
+
+            sendToIntruderItem.addActionListener(e -> {
+                int row = historyTable.getSelectedRow();
+                if (row >= 0) {
+                    int modelRow = historyTable.convertRowIndexToModel(row);
+                    HttpRequestResponse reqResp = tableModel.getRequestResponseAt(modelRow);
+                    if (reqResp != null) {
+                        api.intruder().sendToIntruder(reqResp.request());
+                    }
+                }
+            });
+
+            addToScopeItem.addActionListener(e -> {
+                int row = historyTable.getSelectedRow();
+                if (row >= 0) {
+                    int modelRow = historyTable.convertRowIndexToModel(row);
+                    HttpRequestResponse reqResp = tableModel.getRequestResponseAt(modelRow);
+                    if (reqResp != null) {
+                        String url = reqResp.request().url();
+                        api.scope().includeInScope(url);
+                    }
+                }
+            });
+
+            historyTable.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mousePressed(java.awt.event.MouseEvent e) {
+                    if (e.isPopupTrigger()) {
+                        showMenu(e);
+                    }
+                }
+
+                @Override
+                public void mouseReleased(java.awt.event.MouseEvent e) {
+                    if (e.isPopupTrigger()) {
+                        showMenu(e);
+                    }
+                }
+
+                private void showMenu(java.awt.event.MouseEvent e) {
+                    int row = historyTable.rowAtPoint(e.getPoint());
+                    if (row >= 0 && row < historyTable.getRowCount()) {
+                        historyTable.setRowSelectionInterval(row, row);
+                        contextMenu.show(e.getComponent(), e.getX(), e.getY());
                     }
                 }
             });
