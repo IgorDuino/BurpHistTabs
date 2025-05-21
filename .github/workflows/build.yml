@@ -20,4 +20,34 @@ jobs:
         distribution: 'temurin'
         cache: maven
     - name: Build with Maven
-      run: mvn -B package --file pom.xml 
+      run: mvn -B package --file pom.xml
+    - name: Upload JAR artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: package
+        path: target/HttpHistoryTabs-*-all.jar
+
+release:
+  needs: build
+  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  runs-on: ubuntu-latest
+  permissions:
+    contents: write
+  steps:
+    - name: Download JAR artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: package
+        path: staging
+
+    - name: Create Release and Upload JAR
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ github.run_number }}
+        name: Release v${{ github.run_number }} (commit ${{ github.sha }})
+        body: |
+          Automated release for commit ${{ github.sha }}.
+          Triggered by push to main.
+        files: staging/HttpHistoryTabs-*-all.jar
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
