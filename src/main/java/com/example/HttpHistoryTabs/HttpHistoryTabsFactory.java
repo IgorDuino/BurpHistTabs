@@ -11,6 +11,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.ui.UserInterface;
+import burp.api.montoya.ui.editor.EditorOptions;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
 import burp.api.montoya.ui.swing.SwingUtils;
@@ -150,8 +151,8 @@ public class HttpHistoryTabsFactory {
             historyTable.setAutoCreateRowSorter(true);
             JScrollPane tableScrollPane = new JScrollPane(historyTable);
 
-            requestViewer = userInterface.createHttpRequestEditor();
-            responseViewer = userInterface.createHttpResponseEditor();
+            requestViewer = userInterface.createHttpRequestEditor(EditorOptions.READ_ONLY);
+            responseViewer = userInterface.createHttpResponseEditor(EditorOptions.READ_ONLY);
 
             JSplitPane viewersSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, requestViewer.uiComponent(), responseViewer.uiComponent());
             viewersSplitPane.setResizeWeight(0.5);
