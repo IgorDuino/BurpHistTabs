@@ -17,9 +17,15 @@ import burp.api.montoya.ui.swing.SwingUtils;
 import burp.api.montoya.repeater.Repeater;
 import burp.api.montoya.intruder.Intruder;
 import burp.api.montoya.scope.Scope;
+import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
+import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.TableRowSorter;
+import javax.swing.table.TableColumn;
+import javax.swing.RowSorter;
+import javax.swing.event.ChangeListener;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -82,7 +88,6 @@ public class HttpHistoryTabsFactory {
     }
 
     private void addPlusTab() {
-
         int plusTabIndex = mainTabbedPane.indexOfTab("+");
         if (plusTabIndex != -1) {
             mainTabbedPane.removeTabAt(plusTabIndex);
@@ -92,7 +97,6 @@ public class HttpHistoryTabsFactory {
     }
 
     private void addNewSubTab() {
-
         int plusTabIndex = mainTabbedPane.indexOfTab("+");
         if (plusTabIndex != -1) {
             mainTabbedPane.removeTabAt(plusTabIndex);
@@ -179,19 +183,22 @@ public class HttpHistoryTabsFactory {
             subTabs.remove(subTabToRemove);
             api.logging().logToOutput("Removed sub-tab: " + subTabToRemove.getTabTitle());
 
+            if (subTabs.isEmpty() && mainTabbedPane.getTabCount() <= 1) {
+                addNewSubTab();
+            }
         }
     }
 
     private static class HttpHistorySubTab {
         private final MontoyaApi api;
+        private String tabTitleValue;
         private final JPanel mainPanel;
         private final JTable historyTable;
         private final HistoryTableModel tableModel;
+        private final JScrollPane tableScrollPane;
         private final HttpRequestEditor requestViewer;
         private final HttpResponseEditor responseViewer;
         private final JTextField filterTextField;
-        private final List<HttpRequestResponse> displayedRequests = new ArrayList<>();
-        private String tabTitle;
         private final HttpHistoryTabsFactory factory;
 
         private boolean isRequestResponseViewVisible = true;
@@ -199,26 +206,26 @@ public class HttpHistoryTabsFactory {
 
         private final JSplitPane viewersSplitPane;
         private final JPanel requestResponseViewPanel;
-
-        private final JScrollPane tableScrollPane;
-        private JSplitPane mainHorizontalSplitPane;
-        private final JPanel dynamicContentPanel;
+        private JScrollPane requestResponseViewScrollPane;
+        private final JSplitPane mainHorizontalSplitPane;
+        private JSplitPane mainVerticalSplitPane;
 
         private final JButton hideViewButton;
         private final JButton showViewButton;
         private final JButton togglePositionButton;
-        private final JPanel viewControlsPanel;
 
-        public HttpHistorySubTab(MontoyaApi api, String title, HttpHistoryTabsFactory factory) {
+        public HttpHistorySubTab(MontoyaApi api, String initialTitle, HttpHistoryTabsFactory factory) {
             this.api = api;
-            this.tabTitle = title;
+            this.tabTitleValue = initialTitle;
             this.factory = factory;
             UserInterface userInterface = api.userInterface();
-            SwingUtils swingUtils = userInterface.swingUtils();
 
-            filterTextField = new JTextField(30);
+            mainHorizontalSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+            mainVerticalSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+            viewersSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+
+            filterTextField = new JTextField(20);
             JButton applyFilterButton = new JButton("Apply Filter");
-
             JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
             filterPanel.add(new JLabel("Filter:"));
             filterPanel.add(filterTextField);
@@ -228,50 +235,53 @@ public class HttpHistoryTabsFactory {
             historyTable = new JTable(tableModel);
             historyTable.setAutoCreateRowSorter(true);
             tableScrollPane = new JScrollPane(historyTable);
+            TableColumn idColumn = historyTable.getColumnModel().getColumn(0);
+            idColumn.setPreferredWidth(40);
+            idColumn.setMaxWidth(80);
+            TableRowSorter<?> sorter = (TableRowSorter<?>) historyTable.getRowSorter();
+            if (sorter != null) {
+                List<RowSorter.SortKey> sortKeys = new ArrayList<>();
+                sortKeys.add(new RowSorter.SortKey(0, SortOrder.DESCENDING));
+                sorter.setSortKeys(sortKeys);
+                sorter.sort();
+            }
 
             requestViewer = userInterface.createHttpRequestEditor(EditorOptions.READ_ONLY);
             responseViewer = userInterface.createHttpResponseEditor(EditorOptions.READ_ONLY);
-
-            viewersSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, requestViewer.uiComponent(),
-                    responseViewer.uiComponent());
+            viewersSplitPane.setTopComponent(requestViewer.uiComponent());
+            viewersSplitPane.setBottomComponent(responseViewer.uiComponent());
             viewersSplitPane.setResizeWeight(0.5);
 
             requestResponseViewPanel = new JPanel(new BorderLayout());
             requestResponseViewPanel.add(viewersSplitPane, BorderLayout.CENTER);
+            requestResponseViewScrollPane = new JScrollPane(requestResponseViewPanel);
+            requestResponseViewScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+            requestResponseViewScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
-            hideViewButton = new JButton("Hide View");
             showViewButton = new JButton("Show View");
-            togglePositionButton = new JButton("Toggle View Position");
+            hideViewButton = new JButton("Hide View");
+            togglePositionButton = new JButton();
 
-            showViewButton.setVisible(false);
-
-            viewControlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-            viewControlsPanel.add(hideViewButton);
+            JPanel viewControlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
             viewControlsPanel.add(showViewButton);
+            viewControlsPanel.add(hideViewButton);
             viewControlsPanel.add(togglePositionButton);
 
-            JPanel topActionPanel = new JPanel(new BorderLayout());
-            topActionPanel.add(filterPanel, BorderLayout.WEST);
-            topActionPanel.add(viewControlsPanel, BorderLayout.EAST);
+            JPanel topBarPanel = new JPanel(new BorderLayout());
+            topBarPanel.add(filterPanel, BorderLayout.CENTER);
+            topBarPanel.add(viewControlsPanel, BorderLayout.EAST);
 
             mainPanel = new JPanel(new BorderLayout());
-            mainPanel.add(topActionPanel, BorderLayout.NORTH);
-
-            dynamicContentPanel = new JPanel(new BorderLayout());
-            mainPanel.add(dynamicContentPanel, BorderLayout.CENTER);
-
-            updateViewLayout();
+            mainPanel.add(topBarPanel, BorderLayout.NORTH);
 
             hideViewButton.addActionListener(e -> {
                 isRequestResponseViewVisible = false;
                 updateViewLayout();
             });
-
             showViewButton.addActionListener(e -> {
                 isRequestResponseViewVisible = true;
                 updateViewLayout();
             });
-
             togglePositionButton.addActionListener(e -> {
                 if (isRequestResponseViewVisible) {
                     isRequestResponseViewAtBottom = !isRequestResponseViewAtBottom;
@@ -283,130 +293,130 @@ public class HttpHistoryTabsFactory {
                 if (!e.getValueIsAdjusting()) {
                     int selectedRowInView = historyTable.getSelectedRow();
                     if (selectedRowInView >= 0) {
-                        boolean visibilityJustChanged = false;
+                        boolean visibilityChanged = false;
                         if (!isRequestResponseViewVisible) {
                             isRequestResponseViewVisible = true;
-                            visibilityJustChanged = true;
+                            visibilityChanged = true;
                         }
-
                         int modelRow = historyTable.convertRowIndexToModel(selectedRowInView);
                         HttpRequestResponse selectedEntry = tableModel.getRequestResponseAt(modelRow);
                         if (selectedEntry != null) {
                             requestViewer.setRequest(selectedEntry.request());
-                            if (selectedEntry.response() != null) {
-                                responseViewer.setResponse(selectedEntry.response());
-                            } else {
-                                responseViewer.setResponse(HttpResponse.httpResponse());
-                            }
+                            responseViewer.setResponse(selectedEntry.response() != null ? selectedEntry.response()
+                                    : HttpResponse.httpResponse());
                         }
-
-                        if (visibilityJustChanged) {
+                        if (visibilityChanged) {
                             updateViewLayout();
                         }
                     }
                 }
             });
 
+            historyTable.setComponentPopupMenu(createContextMenu());
+
+            isRequestResponseViewVisible = true;
+            isRequestResponseViewAtBottom = false;
+            updateViewLayout();
+        }
+
+        private JPopupMenu createContextMenu() {
             JPopupMenu contextMenu = new JPopupMenu();
             JMenuItem sendToRepeaterItem = new JMenuItem("Send to Repeater");
-            JMenuItem sendToIntruderItem = new JMenuItem("Send to Intruder");
-            JMenuItem addToScopeItem = new JMenuItem("Add to Scope");
+            sendToRepeaterItem.addActionListener(e -> sendSelectedToRepeater());
             contextMenu.add(sendToRepeaterItem);
+
+            JMenuItem sendToIntruderItem = new JMenuItem("Send to Intruder");
+            sendToIntruderItem.addActionListener(e -> sendSelectedToIntruder());
             contextMenu.add(sendToIntruderItem);
+
+            JMenuItem addToScopeItem = new JMenuItem("Add to Scope");
+            addToScopeItem.addActionListener(e -> addSelectedToScope());
             contextMenu.add(addToScopeItem);
+            return contextMenu;
+        }
 
-            sendToRepeaterItem.addActionListener(e -> {
-                int row = historyTable.getSelectedRow();
-                if (row >= 0) {
-                    int modelRow = historyTable.convertRowIndexToModel(row);
-                    HttpRequestResponse reqResp = tableModel.getRequestResponseAt(modelRow);
-                    if (reqResp != null) {
-                        api.repeater().sendToRepeater(reqResp.request(), null);
-                    }
-                }
-            });
+        private HttpRequestResponse getSelectedHttpRequestResponse() {
+            int selectedRow = historyTable.getSelectedRow();
+            if (selectedRow >= 0) {
+                int modelRow = historyTable.convertRowIndexToModel(selectedRow);
+                return tableModel.getRequestResponseAt(modelRow);
+            }
+            return null;
+        }
 
-            sendToIntruderItem.addActionListener(e -> {
-                int row = historyTable.getSelectedRow();
-                if (row >= 0) {
-                    int modelRow = historyTable.convertRowIndexToModel(row);
-                    HttpRequestResponse reqResp = tableModel.getRequestResponseAt(modelRow);
-                    if (reqResp != null) {
-                        api.intruder().sendToIntruder(reqResp.request());
-                    }
-                }
-            });
+        private void sendSelectedToRepeater() {
+            HttpRequestResponse selected = getSelectedHttpRequestResponse();
+            if (selected != null) {
+                api.repeater().sendToRepeater(selected.request(), tabTitleValue);
+            }
+        }
 
-            addToScopeItem.addActionListener(e -> {
-                int row = historyTable.getSelectedRow();
-                if (row >= 0) {
-                    int modelRow = historyTable.convertRowIndexToModel(row);
-                    HttpRequestResponse reqResp = tableModel.getRequestResponseAt(modelRow);
-                    if (reqResp != null) {
-                        String url = reqResp.request().url();
-                        api.scope().includeInScope(url);
-                    }
-                }
-            });
+        private void sendSelectedToIntruder() {
+            HttpRequestResponse selected = getSelectedHttpRequestResponse();
+            if (selected != null) {
+                api.intruder().sendToIntruder(selected.request());
+            }
+        }
 
-            historyTable.addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override
-                public void mousePressed(java.awt.event.MouseEvent e) {
-                    if (e.isPopupTrigger()) {
-                        showMenu(e);
-                    }
-                }
-
-                @Override
-                public void mouseReleased(java.awt.event.MouseEvent e) {
-                    if (e.isPopupTrigger()) {
-                        showMenu(e);
-                    }
-                }
-
-                private void showMenu(java.awt.event.MouseEvent e) {
-                    int row = historyTable.rowAtPoint(e.getPoint());
-                    if (row >= 0 && row < historyTable.getRowCount()) {
-                        historyTable.setRowSelectionInterval(row, row);
-                        contextMenu.show(e.getComponent(), e.getX(), e.getY());
-                    }
-                }
-            });
+        private void addSelectedToScope() {
+            HttpRequestResponse selected = getSelectedHttpRequestResponse();
+            if (selected != null) {
+                api.scope().includeInScope(selected.request().url());
+            }
         }
 
         private void updateViewLayout() {
+            mainPanel.remove(mainHorizontalSplitPane);
+            mainPanel.remove(mainVerticalSplitPane);
+            mainPanel.remove(tableScrollPane);
 
-            dynamicContentPanel.removeAll();
+            if (isRequestResponseViewVisible) {
+                requestResponseViewPanel.setVisible(true);
+                requestResponseViewScrollPane.setVisible(true);
+                viewersSplitPane.setVisible(true);
 
-            if (!isRequestResponseViewVisible) {
-                dynamicContentPanel.add(tableScrollPane, BorderLayout.CENTER);
-                togglePositionButton.setEnabled(false);
-                togglePositionButton.setText(isRequestResponseViewAtBottom ? "Move to Right" : "Move to Bottom");
-                hideViewButton.setVisible(false);
-                showViewButton.setVisible(true);
-            } else {
-                togglePositionButton.setEnabled(true);
-                hideViewButton.setVisible(true);
-                showViewButton.setVisible(false);
                 if (isRequestResponseViewAtBottom) {
+                    mainVerticalSplitPane.setTopComponent(tableScrollPane);
+                    mainVerticalSplitPane.setBottomComponent(requestResponseViewScrollPane);
+                    mainVerticalSplitPane.setResizeWeight(0.0);
+                    mainPanel.add(mainVerticalSplitPane, BorderLayout.CENTER);
                     togglePositionButton.setText("Move to Right");
-                    dynamicContentPanel.add(tableScrollPane, BorderLayout.CENTER);
-                    dynamicContentPanel.add(requestResponseViewPanel, BorderLayout.SOUTH);
-                    requestResponseViewPanel
-                            .setPreferredSize(new Dimension(0, (int) (dynamicContentPanel.getHeight() * 0.5)));
                 } else {
-                    togglePositionButton.setText("Move to Bottom");
-                    mainHorizontalSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScrollPane,
-                            requestResponseViewPanel);
+                    mainHorizontalSplitPane.setLeftComponent(tableScrollPane);
+                    mainHorizontalSplitPane.setRightComponent(requestResponseViewScrollPane);
                     mainHorizontalSplitPane.setResizeWeight(0.4);
-                    dynamicContentPanel.add(mainHorizontalSplitPane, BorderLayout.CENTER);
+                    mainPanel.add(mainHorizontalSplitPane, BorderLayout.CENTER);
+                    togglePositionButton.setText("Move to Bottom");
                 }
+            } else {
+                mainPanel.add(tableScrollPane, BorderLayout.CENTER);
             }
 
-            dynamicContentPanel.revalidate();
-            dynamicContentPanel.repaint();
+            showViewButton.setVisible(!isRequestResponseViewVisible);
+            showViewButton.setEnabled(!isRequestResponseViewVisible);
+            hideViewButton.setVisible(isRequestResponseViewVisible);
+            hideViewButton.setEnabled(isRequestResponseViewVisible);
+            togglePositionButton.setEnabled(isRequestResponseViewVisible);
+
             mainPanel.revalidate();
             mainPanel.repaint();
+
+            if (isRequestResponseViewVisible && isRequestResponseViewAtBottom) {
+                SwingUtilities.invokeLater(() -> {
+                    int currentHeight = mainVerticalSplitPane.getHeight();
+                    if (currentHeight > 350) {
+                        mainVerticalSplitPane.setDividerLocation(currentHeight - 300);
+                    } else if (currentHeight > 0) {
+                        mainVerticalSplitPane.setDividerLocation(currentHeight / 2.0);
+                    }
+                    requestResponseViewScrollPane.revalidate();
+                    requestResponseViewScrollPane.repaint();
+                });
+            } else if (isRequestResponseViewVisible && !isRequestResponseViewAtBottom) {
+                SwingUtilities.invokeLater(() -> {
+                    mainHorizontalSplitPane.setDividerLocation(0.4);
+                });
+            }
         }
 
         public Component getUiComponent() {
@@ -414,11 +424,11 @@ public class HttpHistoryTabsFactory {
         }
 
         public String getTabTitle() {
-            return tabTitle;
+            return tabTitleValue;
         }
 
         public void setTabTitle(String title) {
-            this.tabTitle = title;
+            this.tabTitleValue = title;
         }
 
         public void addRequestResponse(HttpRequestResponse requestResponse) {
@@ -428,14 +438,18 @@ public class HttpHistoryTabsFactory {
         }
 
         public boolean matchesFilters(HttpRequestResponse requestResponse) {
-            if (!requestResponse.request().isInScope()) {
-                return false;
-            }
-            String filterText = filterTextField.getText().trim();
+            String filterText = filterTextField.getText().trim().toLowerCase();
             if (filterText.isEmpty()) {
                 return true;
             }
-            return requestResponse.request().contains(filterText, false);
+            if (requestResponse.request().toString().toLowerCase().contains(filterText)) {
+                return true;
+            }
+            if (requestResponse.response() != null
+                    && requestResponse.response().toString().toLowerCase().contains(filterText)) {
+                return true;
+            }
+            return false;
         }
     }
 
@@ -444,8 +458,8 @@ public class HttpHistoryTabsFactory {
         private final String[] columnNames = { "#", "Host", "Method", "URL", "Status", "Length" };
 
         public void addEntry(HttpRequestResponse entry) {
-            log.add(entry);
-            fireTableRowsInserted(log.size() - 1, log.size() - 1);
+            log.add(0, entry);
+            fireTableRowsInserted(0, 0);
         }
 
         public HttpRequestResponse getRequestResponseAt(int rowIndex) {
@@ -488,7 +502,7 @@ public class HttpHistoryTabsFactory {
                 case 4:
                     return entry.response() != null ? entry.response().statusCode() : "N/A";
                 case 5:
-                    return entry.response() != null ? entry.response().bodyToString().length() : 0;
+                    return entry.response() != null ? entry.response().body().length() : 0;
                 default:
                     return "";
             }
@@ -496,8 +510,11 @@ public class HttpHistoryTabsFactory {
 
         @Override
         public Class<?> getColumnClass(int columnIndex) {
-            if (columnIndex == 0 || columnIndex == 4 || columnIndex == 5) {
+            if (columnIndex == 0 || columnIndex == 5) {
                 return Integer.class;
+            }
+            if (columnIndex == 4) {
+                return Object.class;
             }
             return String.class;
         }

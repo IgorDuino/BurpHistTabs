@@ -21,7 +21,7 @@ public class HttpHistoryTabsExtension implements BurpExtension {
         logging.logToOutput("HttpHistoryTabs extension loading...");
 
         HttpHistoryTabsFactory httpHistoryTabsFactory = new HttpHistoryTabsFactory(api);
-        api.userInterface().registerSuiteTab("HttpHistoryTabs", httpHistoryTabsFactory.getMainPanel());
+        api.userInterface().registerSuiteTab("HistoryTabs", httpHistoryTabsFactory.getMainPanel());
 
         api.extension().registerUnloadingHandler(new ExtensionUnloadingHandler() {
             @Override
