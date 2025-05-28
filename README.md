@@ -4,6 +4,10 @@ This Burp Suite extension provides an "HttpHistoryTabs" tab, which functions sim
 
 Convenient for testing multiple accounts or microservices.
 
+Examples:
+![image](https://github.com/user-attachments/assets/f657522e-135f-4a9b-8cc7-e01d15ab3e50)
+![image](https://github.com/user-attachments/assets/38fb291a-fd2d-4464-bbeb-64f4b71968de)
+
 ## Features
 
 - **Main Tab (`HttpHistoryTabs`):** A top-level tab in Burp Suite.
