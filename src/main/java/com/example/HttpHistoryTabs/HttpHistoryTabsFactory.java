@@ -428,11 +428,13 @@ public class HttpHistoryTabsFactory {
         }
 
         public boolean matchesFilters(HttpRequestResponse requestResponse) {
+            if (!requestResponse.request().isInScope()) {
+                return false;
+            }
             String filterText = filterTextField.getText().trim();
             if (filterText.isEmpty()) {
                 return true;
             }
-
             return requestResponse.request().contains(filterText, false);
         }
     }
